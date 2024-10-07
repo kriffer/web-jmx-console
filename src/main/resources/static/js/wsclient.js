@@ -58,7 +58,7 @@ function connect() {
             button.addEventListener('click', function () {
                 request.status = "DISCONNECT"
                 localPids.selectedIndex = 0;
-                connections.selectedIndex = 0;
+                connections?connections.selectedIndex = 0:''
                 request.host = ""
                 request.port = ""
                 request.pid = ""
@@ -80,7 +80,7 @@ function connect() {
         if (response.status === "FAILED") {
             statusFlag = response.status;
             localPids.selectedIndex = 0;
-            connections.selectedIndex = 0;
+            connections?connections.selectedIndex = 0:''
             alert(response.error);
         }
 
@@ -200,6 +200,7 @@ const myChartClasses = document.getElementById('myChartClasses');
 const connectionRadio1 = document.getElementById("connectionRadio1");
 const connectionRadio2 = document.getElementById("connectionRadio2");
 const connections = document.getElementById("selectConnection");
+const emptyConnections = document.getElementById("emptySelectConnection");
 const localPids = document.getElementById("selectPid");
 let statusFlag = ''
 let pid = ''
@@ -207,7 +208,7 @@ let processName = ''
 let request = {};
 
 
-connections.addEventListener("change", function () {
+connections && connections.addEventListener("change", function () {
     const selectedValue = this.selectedIndex !== 0 ? this.options[this.selectedIndex].value : '';
     let values = []
     if (selectedValue) {
@@ -221,12 +222,13 @@ connections.addEventListener("change", function () {
     host.value = values[0];
     port.value = values[1];
 })
+
 if (connectionRadio1.checked) {
     localPids.disabled = true;
 }
 
 if (connectionRadio2.checked) {
-    connections.disabled = true;
+    connections ? connections.disabled = true : emptyConnections.disabled = true
 }
 
 
@@ -234,7 +236,7 @@ connectionRadio1.addEventListener("change", function (e) {
     localPids.selectedIndex = 0;
     localPids.disabled = true;
 
-    connections.disabled = false;
+    connections ? connections.disabled = false : emptyConnections.disabled = false
     host.disabled = false;
     port.disabled = false;
 })
@@ -242,10 +244,10 @@ connectionRadio1.addEventListener("change", function (e) {
 connectionRadio2.addEventListener("change", function (e) {
     host.value = '';
     port.value = '';
-    connections.selectedIndex = 0;
+    connections ? connections.selectedIndex = 0 : ''
     host.disabled = true;
     port.disabled = true
-    connections.disabled = true;
+    connections ? connections.disabled = true : emptyConnections.disabled = true
     localPids.disabled = false;
 
 })

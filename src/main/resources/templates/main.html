@@ -214,13 +214,17 @@
                     </div>
                     <div class="col-sm">
                         <select class="form-select form-select-sm" aria-label="" id="selectConnection"
-                                th:field="*{connectionMap}">
+                                th:if="${connectionMap != null && !#maps.isEmpty(connectionMap)}" th:field="*{connectionMap}">
                             <option value="" selected>Select remote connections</option>
                             <option th:each="connection : ${connectionMap}"
                                     th:value="${connection.host}+':'+${connection.port}"
                                     th:text="${connection.host}+':'+${connection.port}">
 
                             </option>
+                        </select>
+                        <select class="form-select form-select-sm" aria-label="" id="emptySelectConnection"
+                                th:unless="${connectionMap != null && !#maps.isEmpty(connectionMap)}">
+                            <option value="" disabled selected>No remote connections defined</option>
                         </select>
                     </div>
                     <div class="col-sm">

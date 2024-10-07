@@ -1,9 +1,12 @@
 # Compiled class file
 *.class
+.idea
+.mvn
+.nbproject
 
 # Log file
 *.log
-
+target
 # BlueJ files
 *.ctxt
 
