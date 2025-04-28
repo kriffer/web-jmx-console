@@ -29,9 +29,9 @@ public class MainPageService {
     public HashMap<Long, String> getLocalProcesses() {
         List<ProcessHandle> processes = localEnvUtil.getProcesses();
         HashMap<Long, String> localProcesses = new HashMap<>();
-        log.debug("Getting list of local java processes:");
+        //log.debug("Getting list of local java processes:");
         for (ProcessHandle handle : processes) {
-            log.debug("PID:{},{}", handle.pid(), handle.info().commandLine().orElse("N/A"));
+            //log.debug("PID:{},{}", handle.pid(), handle.info().commandLine().orElse("N/A"));
             String s = handle.info().commandLine().orElse("N/A");
             String[] cmd = s.split(" ");
             localProcesses.put(handle.pid(), cmd[cmd.length - 1]);

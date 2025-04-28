@@ -10,7 +10,7 @@ Besides traditional JDK implementations (based on OpenJDK) this tool supports JM
 
 ### System requirements
  - JDK 21
- - Note: n order to receive Azul Zing JDK metrics the application requires `ZingJMM.jar` in the classpath.
+ - Note: In order to receive Azul Zing JDK metrics the application requires `ZingJMM.jar` in the classpath.
 This library can be obtained from  Azul Zing JDK stream builds that are free for development and testing purposes. 
 The instruction on how to receive the builds is here https://docs.azul.com/prime/installation-and-configuration
    `ZingJMM.jar`  can be obtained from $ZING_HOME/etc/extensions/mxbeans/agents/ZingJMM.jar
@@ -20,7 +20,8 @@ The instruction on how to receive the builds is here https://docs.azul.com/prime
      ```
      $ git clone https://github.com/kriffer/web-jmx-console.git
      ```
-   - Once you get stream build of Azul Zing JDK, locate `$ZING_HOME/etc/extensions/mxbeans/agents/ZingJMM.jar` and add that to your local maven repository: 
+   - Once you got stream build of Azul Zing JDK, locate `$ZING_HOME/etc/extensions/mxbeans/agents/ZingJMM.jar` and 
+     either add to your local maven repository: 
    
      ```
      $ mvn install:install-file \
@@ -30,6 +31,8 @@ The instruction on how to receive the builds is here https://docs.azul.com/prime
      -Dversion=1.0 \
      -Dpackaging=jar
       ```
+     
+     or you can add `ZingJMM.jar` to project folder `lib`
 
    - Build the project:
       ````

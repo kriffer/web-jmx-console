@@ -25,9 +25,6 @@ import com.sun.management.OperatingSystemMXBean;
 @Slf4j
 public class Client {
 
-    public String host = "";
-    public int port = 0;
-    public String pid = "";
 
     private ClientListener listener;
     private MBeanServerConnection mbsc;
@@ -39,8 +36,11 @@ public class Client {
     private ClassLoadingMXBean mxbeanProxyClassLoading;
     private ThreadMXBean mxbeanProxyThreading;
 
-    public void connect() throws IOException {
+    public void connect(String host, int port, String pid ) throws IOException {
 
+        log.debug("host: {} ", host);
+        log.debug("port: {} ", port);
+        log.debug("pid: {} ", pid);
         String jmxURL;
         if (pid != null && !pid.isEmpty()) {
             try {
@@ -74,11 +74,14 @@ public class Client {
             jmxURL = "service:jmx:rmi:///jndi/rmi://" + host + ":" + port + "/jmxrmi";
         }
 
+        log.debug(jmxURL);
         JMXServiceURL url = new JMXServiceURL(jmxURL);
         jmxConnector = JMXConnectorFactory.connect(url);
         this.listener = new ClientListener();
         echo("\nGet an MBeanServerConnection");
         this.mbsc = jmxConnector.getMBeanServerConnection();
+
+
     }
 
 
@@ -188,8 +191,21 @@ public class Client {
     }
 
     public void close() throws IOException {
+
+      // Decrement usage counter
+//            if (currentUsage == 0 && jmxConnector != null) {  // Only disconnect if no threads are using it
+
+
         jmxConnector.close();
-        echo("\njmxConnector is closed...");
+                echo("\njmxConnector is closed...");
+//            } else {
+//                System.out.println("Thread finished but connection kept alive. Current usage: " + currentUsage);
+//            }
+
+    }
+
+    public boolean isClosed() {
+        return jmxConnector == null;
     }
 
     private static void echo(String msg) {

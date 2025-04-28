@@ -3,6 +3,7 @@
 .idea
 .mvn
 .nbproject
+lib/**
 
 # Log file
 *.log
