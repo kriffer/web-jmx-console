@@ -21,7 +21,7 @@ The instruction on how to receive the builds is here https://docs.azul.com/prime
      $ git clone https://github.com/kriffer/web-jmx-console.git
      ```
    - Once you got stream build of Azul Zing JDK, locate `$ZING_HOME/etc/extensions/mxbeans/agents/ZingJMM.jar` and 
-     either add to your local maven repository: 
+     add to your local maven repository: 
    
      ```
      $ mvn install:install-file \
@@ -32,7 +32,6 @@ The instruction on how to receive the builds is here https://docs.azul.com/prime
      -Dpackaging=jar
       ```
      
-     or you can add `ZingJMM.jar` to project folder `lib`
 
    - Build the project:
       ````

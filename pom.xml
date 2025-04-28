@@ -67,8 +67,7 @@
 			<groupId>com.azul</groupId>
 			<artifactId>zing-jmm</artifactId>
 			<version>1.0</version>
-			<scope>system</scope>
-			<systemPath>${project.basedir}/lib/ZingJMM.jar</systemPath>
+			<scope>compile</scope>
 		</dependency>
 	</dependencies>
 
