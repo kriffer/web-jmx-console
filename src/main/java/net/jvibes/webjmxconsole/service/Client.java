@@ -35,6 +35,8 @@ public class Client {
     private OperatingSystemMXBean mxbeanProxyOS;
     private ClassLoadingMXBean mxbeanProxyClassLoading;
     private ThreadMXBean mxbeanProxyThreading;
+    private BufferPoolMXBean mxbeanProxyDirectBufferPool;
+    private BufferPoolMXBean mxbeanProxyMappedBufferPool;
 
     public void connect(String host, int port, String pid ) throws IOException {
 
@@ -137,6 +139,23 @@ public class Client {
         echo("\nAdd notification listener for Threading...");
     }
 
+    public void initDirectBufferPoolData() throws MalformedObjectNameException {
+        ObjectName mbeanName = new ObjectName("java.nio:type=BufferPool,name=direct");
+        this.mxbeanProxyDirectBufferPool =
+                JMX.newMXBeanProxy(mbsc, mbeanName, BufferPoolMXBean.class);
+
+        echo("\nAdd notification listener for Direct BufferPool...");
+    }
+
+    public void initMappedBufferPoolData() throws MalformedObjectNameException {
+        ObjectName mbeanName = new ObjectName("java.nio:type=BufferPool,name=mapped");
+        this.mxbeanProxyMappedBufferPool =
+                JMX.newMXBeanProxy(mbsc, mbeanName, BufferPoolMXBean.class);
+
+        echo("\nAdd notification listener for Mapped BufferPool...");
+    }
+
+
     public com.azul.zing.management.MemoryUsage getZingHeapData() throws IOException, MalformedObjectNameException, InstanceNotFoundException {
         return mxbeanProxyZingHeap.getJavaHeapMemoryUsage();
     }
@@ -168,6 +187,17 @@ public class Client {
 
     public ThreadMXBean getThreadData() throws IOException, MalformedObjectNameException, InstanceNotFoundException {
         return mxbeanProxyThreading;
+
+    }
+
+
+    public BufferPoolMXBean getDirectBufferPoolData() throws IOException, MalformedObjectNameException, InstanceNotFoundException {
+        return mxbeanProxyDirectBufferPool;
+
+    }
+
+    public BufferPoolMXBean getMappedBufferPoolData() throws IOException, MalformedObjectNameException, InstanceNotFoundException {
+        return mxbeanProxyMappedBufferPool;
 
     }
 

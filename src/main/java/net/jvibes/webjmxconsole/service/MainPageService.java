@@ -26,7 +26,7 @@ public class MainPageService {
         return connectionProperties.getConnection();
     }
 
-    public HashMap<Long, String> getLocalProcesses() {
+    public Map<Long, String> getLocalProcesses() {
         List<ProcessHandle> processes = localEnvUtil.getProcesses();
         HashMap<Long, String> localProcesses = new HashMap<>();
         //log.debug("Getting list of local java processes:");

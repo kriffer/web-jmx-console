@@ -2,143 +2,213 @@ let socket;
 
 connect();
 
-function connect() {
+
+const pidSelect = document.getElementById('selectPid');
+const connectionSelect = document.getElementById('selectConnection');
+
+
+async function updateConnections() {
+    await fetch('/api/connections').then(responseConnections => responseConnections.ok ? responseConnections.json() : "").then(connections => {
+
+        connectionSelect.innerHTML = '';
+
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '--Select remote connections--';
+        connectionSelect.appendChild(defaultOption);
+
+
+        for (const [id, connection] of Object.entries(connections)) {
+            const option = document.createElement('option');
+            option.value = connection.host + ':' + connection.port;
+            option.textContent = `${connection.host}:${connection.port}`;
+            connectionSelect.appendChild(option);
+        }
+    });
+    await fetch('/api/pids').then(responsePids => responsePids.json()).then(pids => {
+
+        pidSelect.innerHTML = '';
+
+        const defaultOption = document.createElement('option');
+        defaultOption.value = '';
+        defaultOption.textContent = '--Select local processes--';
+        pidSelect.appendChild(defaultOption);
+
+        for (const [pid, name] of Object.entries(pids)) {
+            const option = document.createElement('option');
+            option.value = pid;
+            option.textContent = `${name} (${pid})`;
+            pidSelect.appendChild(option);
+        }
+
+    });
+
+}
+
+async function connect() {
     socket = new WebSocket(location.protocol !== 'https:' ?
         `ws://${window.location.hostname}:8090/console` :
         `wss://${window.location.hostname}/console`);
 
+    updateConnections();
 
-socket.addEventListener('open', function (event) {
-    console.log("ws connection with server is open ")
+    socket.addEventListener('open', function (event) {
+        console.log("ws connection with server is open ")
 
-});
+    });
 
-socket.addEventListener('close', function (event) {
-    console.log("ws connection with server is closed with code: " + event.code + " and reason: " + event.reason)
+    socket.addEventListener('close', function (event) {
+        console.log("ws connection with server is closed with code: " + event.code + " and reason: " + event.reason)
 
-});
+    });
 
-socket.addEventListener('error', function (event) {
-    console.log("ws error" + event)
-});
+    socket.addEventListener('error', function (event) {
+        console.log("ws error" + event)
+    });
 
-socket.addEventListener('message', function (event) {
+    socket.addEventListener('message', function (event) {
 
-    chart.data.labels.push(new Date().toLocaleTimeString().toString());
+        chart.data.labels.push(new Date().toLocaleTimeString().toString());
 
-    let response = JSON.parse(event.data)
+        let response = JSON.parse(event.data)
 
-    console.log("Server response: ", response)
+        console.log("Server response: ", response)
 
-    if (response.status === "OK") {
-        statusFlag = response.status;
-        let form = document.getElementsByName('connection')[0];
-        form.classList.add('d-none');
+        if (response.status === "OK") {
+            connectButton.disabled = false;
+            connectButton.textContent = 'Connect';
+            statusFlag = response.status;
+            let form = document.getElementsByName('connection')[0];
+            form.classList.add('d-none');
 
-        const p = document.createElement("p");
-        if (hostValue && portValue) {
-            p.textContent = `You are connected to ${hostValue}:${portValue}`
+            const p = document.createElement("p");
+            p.id = "status-message";
+            if (hostValue && portValue) {
+                p.textContent = `You are connected to ${hostValue}:${portValue}`
+            }
+            if (pid) {
+                p.textContent = `You are connected to ${processName}`
+            }
+
+            document.getElementById('form-container').appendChild(p)
+            const button = document.createElement("button");
+            button.innerHTML = "Disconnect";
+            button.className = "btn btn-dark   btn-sm ";
+            button.id = "disconnect-button";
+            document.getElementById('form-container').appendChild(button)
+
+            button.addEventListener('click', function () {
+                request.status = "DISCONNECT"
+                localPids.selectedIndex = 0;
+                connections ? connections.selectedIndex = 0 : ''
+                request.host = ""
+                request.port = ""
+                request.pid = ""
+                pid = ""
+                console.log("Client request: ", request)
+                if (socket.readyState === WebSocket.OPEN) {
+                    socket.send(JSON.stringify(request));
+                } else {
+                    console.error("WebSocket connection is not open.");
+                }
+                form.classList.remove('d-none');
+                button.remove()
+                p.remove()
+                socket.close();
+                socket = '';
+                connect();
+            });
+
+
         }
-        if (pid) {
-            p.textContent = `You are connected to ${processName}`
-        }
-
-        document.getElementById('form-container').appendChild(p)
-        const button = document.createElement("button");
-        button.innerHTML = "Disconnect";
-        button.className = "btn btn-dark   btn-sm ";
-        document.getElementById('form-container').appendChild(button)
-
-        button.addEventListener('click', function () {
-            request.status = "DISCONNECT"
+        if (response.status === "FAILED") {
+            connectButton.disabled = false;
+            connectButton.textContent = 'Connect';
+            statusFlag = response.status;
             localPids.selectedIndex = 0;
             connections ? connections.selectedIndex = 0 : ''
-            request.host = ""
-            request.port = ""
-            request.pid = ""
-            pid = ""
-            console.log("Client request: ", request)
-            if (socket.readyState === WebSocket.OPEN) {
-                socket.send(JSON.stringify(request));
-            } else {
-                console.error("WebSocket connection is not open.");
-            }
+            alert(response.error);
+        }
+
+        if (response.status === "ERROR") {
+            connectButton.disabled = false;
+            connectButton.textContent = 'Connect';
+            alert(response.message);
+            statusFlag = 'FAILED';
+            let form = document.getElementsByName('connection')[0];
             form.classList.remove('d-none');
-            button.remove()
-            p.remove()
+            localPids.selectedIndex = 0;
+            connections ? connections.selectedIndex = 0 : ''
+            document.getElementById('disconnect-button')?.remove()
+            document.getElementById('status-message')?.remove()
             socket.close();
-            socket='';
+            socket = '';
             connect();
-        });
+        }
 
 
-    }
-    if (response.status === "FAILED") {
-        statusFlag = response.status;
-        localPids.selectedIndex = 0;
-        connections ? connections.selectedIndex = 0 : ''
-        alert(response.error);
-    }
+        heapCommittedLabel.textContent = `heap committed ${response.committed ? (response.committed / 1024 / 1024).toFixed(2) : ' - '}  Mb `;
+        heapUsedLabel.textContent = `heap used ${response.used ? (response.used / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        heapInitLabel.textContent = `heap init ${response.init ? (response.init / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        heapMaxLabel.textContent = `heap max ${response.max ? (response.max / 1024 / 1024).toFixed(2) : ' - '} Mb ${response.poolSizeTypeName ? `(${response.poolSizeTypeName})` : ''}`;
+
+        nonHeapSizeLabel.textContent = `non-heap size ${response.nonHeapSize ? (response.nonHeapSize / 1024 / 1024).toFixed(2) : ' - '}  Mb `;
+        nonHeapUsedLabel.textContent = `non-heap used ${response.nonHeapUsed ? (response.nonHeapUsed / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        nonHeapInitLabel.textContent = `non-heap init ${response.nonHeapInit ? (response.nonHeapInit / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+
+        directPoolMemoryUsedLabel.textContent = `Direct Pool memory used ${response.directPoolMemoryUsed ? (response.directPoolMemoryUsed / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        mappedPoolMemoryUsedLabel.textContent = `Mapped Pool memory used ${response.mappedPoolMemoryUsed ? (response.mappedPoolMemoryUsed / 1024 / 1024).toFixed(2) : ' - '} Mb`;
 
 
-    heapCommittedLabel.textContent = `heap committed ${response.committed ? (response.committed / 1024 / 1024).toFixed(2) : ' - '}  Mb `;
-    heapUsedLabel.textContent = `heap used ${response.used ? (response.used / 1024 / 1024).toFixed(2) : ' - '} Mb`;
-    heapInitLabel.textContent = `heap init ${response.init ? (response.init / 1024 / 1024).toFixed(2) : ' - '} Mb`;
-    heapMaxLabel.textContent = `heap max ${response.max ? (response.max / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        nonHeapChart.data.datasets[1].data.push((response.nonHeapSize / 1024 / 1024).toFixed(2));
+        nonHeapChart.data.datasets[0].data.push((response.nonHeapUsed / 1024 / 1024).toFixed(2));
+        nonHeapChart.data.datasets[2].data.push((response.nonHeapInit / 1024 / 1024).toFixed(2));
 
-    nonHeapSizeLabel.textContent = `non-heap size ${response.nonHeapSize ? (response.nonHeapSize / 1024 / 1024).toFixed(2) : ' - '}  Mb `;
-    nonHeapUsedLabel.textContent = `non-heap used ${response.nonHeapUsed ? (response.nonHeapUsed / 1024 / 1024).toFixed(2) : ' - '} Mb`;
-    nonHeapInitLabel.textContent = `non-heap init ${response.nonHeapInit ? (response.nonHeapInit / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        chart.data.datasets[1].data.push((response.committed / 1024 / 1024).toFixed(2));
+        chart.data.datasets[0].data.push((response.used / 1024 / 1024).toFixed(2));
+        chart.data.datasets[2].data.push((response.init / 1024 / 1024).toFixed(2));
+        chart.data.datasets[3].data.push((response.max / 1024 / 1024).toFixed(2));
 
-    nonHeapChart.data.datasets[1].data.push((response.nonHeapSize / 1024 / 1024).toFixed(2));
-    nonHeapChart.data.datasets[0].data.push((response.nonHeapUsed / 1024 / 1024).toFixed(2));
-    nonHeapChart.data.datasets[2].data.push((response.nonHeapInit / 1024 / 1024).toFixed(2));
+        chartCpu.data.datasets[0].data.push((response.processCpuLoad * 1000) / 10).toFixed(2)
 
-    chart.data.datasets[1].data.push((response.committed / 1024 / 1024).toFixed(2));
-    chart.data.datasets[0].data.push((response.used / 1024 / 1024).toFixed(2));
-    chart.data.datasets[2].data.push((response.init / 1024 / 1024).toFixed(2));
-    chart.data.datasets[3].data.push((response.max / 1024 / 1024).toFixed(2));
+        chartClasses.data.datasets[0].data.push(response.loadedClassCount)
+        chartThreads.data.datasets[0].data.push(response.threadCount)
 
-    chartCpu.data.datasets[0].data.push((response.processCpuLoad * 1000) / 10).toFixed(2)
+        chart.update();
+        chartCpu.update();
+        chartClasses.update();
+        chartThreads.update();
+        nonHeapChart.update();
 
-    chartClasses.data.datasets[0].data.push(response.loadedClassCount)
-    chartThreads.data.datasets[0].data.push(response.threadCount)
-
-    chart.update();
-    chartCpu.update();
-    chartClasses.update();
-    chartThreads.update();
-    nonHeapChart.update();
-
-    response.name ? nameLabel.textContent = `Process name: ${response.name}` : '';
-    response.pid ? pidLabel.textContent = `PID: ${response.pid}` : '';
-    response.inputArguments ? inputArgumentsLabel.textContent = `Input arguments: ${response.inputArguments}` : '';
-    response.vmName && response.vmVersion ? vmNameLabel.textContent = `Virtual Machine: ${response.vmName} ${response.vmVersion}` : '';
-    response.vmVendor ? vmVendorLabel.textContent = `Vendor: ${response.vmVendor} ` : ''
-    response.jdkVendorVersion ? jdkVendorVersion.textContent = `JDK vendor version: ${response.jdkVendorVersion} ` : ''
-    response.classPath ? classPathLabel.textContent = `Class path: ${response.classPath} ` : ''
-    response.libraryPath ? libraryPathLabel.textContent = `Library path: ${response.libraryPath} ` : ''
-    response.startTime ? startTimeLabel.textContent = `Start time: ${startDateNormalizer(response.startTime)}` : '';
-    uptimeLabel.textContent = `Uptime: ${response.uptime ? uptimeConverter(response.uptime) : ''}`;
+        response.name ? nameLabel.textContent = `Process name: ${response.name}` : '';
+        response.pid ? pidLabel.textContent = `PID: ${response.pid}` : '';
+        response.inputArguments ? inputArgumentsLabel.textContent = `Input arguments: ${response.inputArguments}` : '';
+        response.vmName && response.vmVersion ? vmNameLabel.textContent = `Virtual Machine: ${response.vmName} ${response.vmVersion}` : '';
+        response.vmVendor ? vmVendorLabel.textContent = `Vendor: ${response.vmVendor} ` : ''
+        response.jdkVendorVersion ? jdkVendorVersion.textContent = `JDK vendor version: ${response.jdkVendorVersion} ` : ''
+        response.classPath ? classPathLabel.textContent = `Class path: ${response.classPath} ` : ''
+        response.libraryPath ? libraryPathLabel.textContent = `Library path: ${response.libraryPath} ` : ''
+        response.startTime ? startTimeLabel.textContent = `Start time: ${startDateNormalizer(response.startTime)}` : '';
+        uptimeLabel.textContent = `Uptime: ${response.uptime ? uptimeConverter(response.uptime) : ''}`;
 
 
-    response.osName && response.osVersion && response.osArch ? osNameLabel.textContent = `Operating system: ${response.osName} ${response.osVersion} ${response.osArch}` : '';
-    processCpuLoadLabel.textContent = `processCpuLoad  ${response.processCpuLoad ? ((response.processCpuLoad * 1000) / 10).toFixed(2) : ' - '} %`;
-    totalMemorySizeLabel.textContent = `Total memory size: ${response.totalMemorySize ? (response.totalMemorySize / 1024 / 1024).toFixed(2) : ' - '} Mb`;
-    freeMemorySizeLabel.textContent = `Free memory size: ${response.freeMemorySize ? (response.freeMemorySize / 1024 / 1024).toFixed(2) : ' - '}  Mb`;
+        response.osName && response.osVersion && response.osArch ? osNameLabel.textContent = `Operating system: ${response.osName} ${response.osVersion} ${response.osArch}` : '';
+        processCpuLoadLabel.textContent = `processCpuLoad  ${response.processCpuLoad ? ((response.processCpuLoad * 1000) / 10).toFixed(2) : ' - '} %`;
+        totalMemorySizeLabel.textContent = `Total memory size: ${response.totalMemorySize ? (response.totalMemorySize / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        freeMemorySizeLabel.textContent = `Free memory size: ${response.freeMemorySize ? (response.freeMemorySize / 1024 / 1024).toFixed(2) : ' - '}  Mb`;
 
-    response.availableProcessors ? availableProcessorsLabel.textContent = `Available Processors: ${response.availableProcessors}` : '';
+        response.availableProcessors ? availableProcessorsLabel.textContent = `Available Processors: ${response.availableProcessors}` : '';
 
-    totalSwapSpaceSizeLabel.textContent = `Total swap size: ${response.totalSwapSpaceSize ? (response.totalSwapSpaceSize / 1024 / 1024).toFixed(2) : ' - '} Mb`;
-    freeSwapSpaceSizeLabel.textContent = `Free swap size: ${response.freeSwapSpaceSize ? (response.freeSwapSpaceSize / 1024 / 1024).toFixed(2) : ' - '}  Mb`;
-
-
-    systemLoadAverageLabel.textContent = `System load average: ${response.systemLoadAverage ? (response.systemLoadAverage) : ' - '}`;
-    loadedClassCount.textContent = `loadedClassCount ${response.loadedClassCount ? (response.loadedClassCount) : ' - '}`;
-    threadCount.textContent = `threadCount ${response.threadCount ? response.threadCount : ' - '} `;
+        totalSwapSpaceSizeLabel.textContent = `Total swap size: ${response.totalSwapSpaceSize ? (response.totalSwapSpaceSize / 1024 / 1024).toFixed(2) : ' - '} Mb`;
+        freeSwapSpaceSizeLabel.textContent = `Free swap size: ${response.freeSwapSpaceSize ? (response.freeSwapSpaceSize / 1024 / 1024).toFixed(2) : ' - '}  Mb`;
 
 
-});
+        systemLoadAverageLabel.textContent = `System load average: ${response.systemLoadAverage ? (response.systemLoadAverage) : ' - '}`;
+        loadedClassCount.textContent = `loadedClassCount ${response.loadedClassCount ? (response.loadedClassCount) : ' - '}`;
+        threadCount.textContent = `threadCount ${response.threadCount ? response.threadCount : ' - '} `;
+
+
+    });
 
 }
 
@@ -149,9 +219,11 @@ const heapMaxLabel = document.getElementById('heap-max');
 const nonHeapSizeLabel = document.getElementById('non-heap-size');
 const nonHeapUsedLabel = document.getElementById('non-heap-used');
 const nonHeapInitLabel = document.getElementById('non-heap-init');
+const directPoolMemoryUsedLabel = document.getElementById('direct-pool-memory-used');
+const mappedPoolMemoryUsedLabel = document.getElementById('mapped-pool-memory-used');
 const host = document.getElementById('host');
 const port = document.getElementById('port');
-
+const connectButton = document.getElementById('connect-button')
 let hostValue = ''
 let portValue = ''
 
@@ -184,6 +256,8 @@ const heapInit = []
 const nonHeapSize = []
 const nonHeapInit = []
 const nonHeapUsed = []
+const directPoolMemoryUsed = []
+const mappedPoolMemoryUsed = []
 const labels = []
 const cpuUsage = []
 const threads = []
@@ -196,7 +270,6 @@ const myChartClasses = document.getElementById('myChartClasses');
 const connectionRadio1 = document.getElementById("connectionRadio1");
 const connectionRadio2 = document.getElementById("connectionRadio2");
 const connections = document.getElementById("selectConnection");
-const emptyConnections = document.getElementById("emptySelectConnection");
 const localPids = document.getElementById("selectPid");
 let statusFlag = ''
 let pid = ''
@@ -224,7 +297,7 @@ if (connectionRadio1.checked) {
 }
 
 if (connectionRadio2.checked) {
-    connections ? connections.disabled = true : emptyConnections.disabled = true
+    connections ? connections.disabled = true : connections.disabled = false
 }
 
 
@@ -232,7 +305,7 @@ connectionRadio1.addEventListener("change", function (e) {
     localPids.selectedIndex = 0;
     localPids.disabled = true;
 
-    connections ? connections.disabled = false : emptyConnections.disabled = false
+    connections ? connections.disabled = false : connections.disabled = true
     host.disabled = false;
     port.disabled = false;
 })
@@ -256,13 +329,16 @@ document.getElementById("selectPid").addEventListener("change", function () {
     processName = this.selectedIndex !== 0 ? this.options[this.selectedIndex].text : '';
 
 })
+
+
 document.forms.connection.onsubmit = function (event) {
     event.preventDefault();
-    console.log(socket)
+    connectButton.disabled = true;
+    connectButton.textContent = 'Connecting...';
+
     if (!socket || socket.readyState !== WebSocket.OPEN) {
         console.log("WebSocket connection is not open. RECONNECTING...");
-    connect()
-
+        connect()
     }
 
     request.host = host.value;
@@ -274,15 +350,9 @@ document.forms.connection.onsubmit = function (event) {
     portValue = port.value
     console.log("Client request: ", request)
 
-
-        socket.send(JSON.stringify(request));
-
-
-
-
-
     host.value = ""
     port.value = ""
+    socket.send(JSON.stringify(request));
 
 };
 

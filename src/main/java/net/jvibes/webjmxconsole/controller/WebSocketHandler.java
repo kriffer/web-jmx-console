@@ -1,20 +1,18 @@
 package net.jvibes.webjmxconsole.controller;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
 
 
 import jakarta.websocket.OnMessage;
-import jakarta.websocket.Session;
 import lombok.extern.slf4j.Slf4j;
 import net.jvibes.webjmxconsole.model.ClientWorker;
 import net.jvibes.webjmxconsole.model.Request;
 import net.jvibes.webjmxconsole.service.Client;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
-import org.springframework.web.socket.WebSocketMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
@@ -22,9 +20,11 @@ import javax.management.InstanceNotFoundException;
 import javax.management.MalformedObjectNameException;
 import java.io.EOFException;
 import java.io.IOException;
+import java.lang.management.BufferPoolMXBean;
 import java.lang.management.MemoryUsage;
 import java.lang.management.RuntimeMXBean;
 import java.net.SocketException;
+import java.rmi.ConnectException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -38,9 +38,6 @@ import java.util.concurrent.ConcurrentHashMap;
 @Slf4j
 public class WebSocketHandler extends TextWebSocketHandler {
 
-    @Autowired
-    private Client client;
-
 
     Map<String, String> systemProperties = new HashMap<>();
     private final ConcurrentHashMap<String, ClientWorker> clientWorkers = new ConcurrentHashMap<>();
@@ -48,7 +45,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
     RuntimeMXBean runtimeData = null;
 
     private final ConcurrentHashMap<String, WebSocketSession> sessions = new ConcurrentHashMap<>();
-    private final ConcurrentHashMap<String, Thread> clientThreads = new ConcurrentHashMap<>();
     private final ObjectWriter objectWriter;
     private boolean isDisconnect = false;
 
@@ -78,6 +74,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
         ClientWorker worker = clientWorkers.remove(clientId);
         if (worker != null) {
             worker.shutdown();
+            worker.getClient().close();
+            log.info("Client worker shutdown: {}", clientId);
         }
 
         sessions.remove(clientId);
@@ -97,7 +95,8 @@ public class WebSocketHandler extends TextWebSocketHandler {
         String clientId = getClientId(session);
         sessions.put(clientId, session);
 
-        ClientWorker worker = new ClientWorker(session);
+        Client client = new Client();
+        ClientWorker worker = new ClientWorker(session, client);
         clientWorkers.put(clientId, worker);
         worker.start();
 
@@ -111,11 +110,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
         String clientId = getClientId(session);
         ClientWorker worker = clientWorkers.get(clientId);
+
         if (worker == null) {
             log.error("No worker found for client: {}", clientId);
             return;
         }
         log.debug("Client message {}", message.getPayload());
+
+
         worker.submit(() -> {
 
             try {
@@ -130,12 +132,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
                 String status = request.getStatus();
                 localPid = request.getPid();
+
                 if (status != null && !status.isEmpty()) {
                     if (status.equals("DISCONNECT")) {
                         isDisconnect = true;
                         session.close();
                         localPid = "";
-                        client.close();
+
+                        worker.getClient().close();
                     } else {
                         isDisconnect = false;
                     }
@@ -143,22 +147,44 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 }
 
 
-                getUpdatedData(session,host,port, localPid);
+                getUpdatedData(session, worker.getClient(), host, port, localPid);
 
 
             } catch (Exception ex) {
-                log.error("Error inside client thread: {}", ex.getMessage());
+
+                String formattedRootError = getFormattedRootError(ex);
+                log.error("Error inside client thread: {}", formattedRootError);
+
+                HashMap<String, String> errorMap = new HashMap();
+                errorMap.put("status", "ERROR");
+                errorMap.put("message", formattedRootError);
+                TextMessage errorMessage;
+                try {
+                    errorMessage = new TextMessage(objectWriter.writeValueAsString(errorMap));
+                    session.sendMessage(errorMessage);
+                } catch (IOException e) {
+                    throw new RuntimeException(e);
+                }
+
+                ex.printStackTrace();
             }
         });
 
 
     }
 
+    public static String getFormattedRootError(Throwable ex) {
+        Throwable cause = ex;
+        while (cause.getCause() != null) {
+            cause = cause.getCause();
+        }
+        return String.format("[%s] %s", cause.getClass().getName(), cause.getMessage());
+    }
 
-    private void getUpdatedData(WebSocketSession session, String host, int port, String localPid ) throws MalformedObjectNameException, IOException, InstanceNotFoundException, InterruptedException {
+    private void getUpdatedData(WebSocketSession session, Client client, String host, int port, String localPid) throws MalformedObjectNameException, IOException, InstanceNotFoundException, InterruptedException {
         if ((host != null && !host.isEmpty()) && (port > 0)) {
 
-            client.connect(host, port, localPid );
+            client.connect(host, port, localPid);
             HashMap<String, String> statusMap = new HashMap();
             statusMap.put("status", "OK");
             TextMessage response = new TextMessage(objectWriter.writeValueAsString(statusMap));
@@ -178,11 +204,14 @@ public class WebSocketHandler extends TextWebSocketHandler {
         client.initOSData();
         client.initClassData();
         client.initThreadData();
+        client.initDirectBufferPoolData();
+        client.initMappedBufferPoolData();
         runtimeData = client.getRuntimeData();
         systemProperties = runtimeData.getSystemProperties();
 
         if (systemProperties.get("java.vm.name").startsWith("Zing")) {
             client.initZingHeapData();
+            client.initHeapData();
         } else {
             client.initHeapData();
         }
@@ -248,17 +277,22 @@ public class WebSocketHandler extends TextWebSocketHandler {
                 if (systemProperties.get("java.vm.name").startsWith("Zing")) {
                     com.azul.zing.management.MemoryUsage heapData = client.getZingHeapData();
                     com.azul.zing.management.MemoryUsage zingNonHeapData = client.getZingNonHeapData();
+                    //getting max heap (Xmx value) for Zing ELASTIC heap using common JMX beans API
+                    MemoryUsage heapDataCommon = client.getHeapData();
 
                     long used = heapData.getUsed();
                     long committed = heapData.getSize();
+                    long max = heapDataCommon.getMax();
                     long init = heapData.getInitialReserved();
+                    String poolSizeTypeName = heapData.getMemoryPoolSizeType().name();
                     long nonHeapInit = zingNonHeapData.getInitialReserved();
                     long nonHeapUsed = zingNonHeapData.getUsed();
                     long nonHeapSize = zingNonHeapData.getSize();
                     tempMap.put("used", String.valueOf(used));
+                    tempMap.put("poolSizeTypeName", poolSizeTypeName);
                     tempMap.put("committed", String.valueOf(committed));
                     tempMap.put("init", String.valueOf(init));
-
+                    tempMap.put("max", String.valueOf(max));
                     tempMap.put("nonHeapInit", String.valueOf(nonHeapInit));
                     tempMap.put("nonHeapUsed", String.valueOf(nonHeapUsed));
                     tempMap.put("nonHeapSize", String.valueOf(nonHeapSize));
@@ -284,6 +318,20 @@ public class WebSocketHandler extends TextWebSocketHandler {
                     tempMap.put("nonHeapSize", String.valueOf(nonHeapSize));
                 }
 
+
+                BufferPoolMXBean directBufferPoolData = client.getDirectBufferPoolData();
+                BufferPoolMXBean mappedBufferPoolData = client.getMappedBufferPoolData();
+
+                tempMap.put("directPoolName", directBufferPoolData.getName());
+                tempMap.put("directPoolCount", String.valueOf(directBufferPoolData.getCount()));
+                tempMap.put("directPoolMemoryUsed", String.valueOf(directBufferPoolData.getMemoryUsed()));
+                tempMap.put("directPoolTotalCapacity", String.valueOf(directBufferPoolData.getTotalCapacity()));
+
+
+                tempMap.put("mappedPoolName", mappedBufferPoolData.getName());
+                tempMap.put("mappedPoolCount", String.valueOf(mappedBufferPoolData.getCount()));
+                tempMap.put("mappedPoolMemoryUsed", String.valueOf(mappedBufferPoolData.getMemoryUsed()));
+                tempMap.put("mappedPoolTotalCapacity", String.valueOf(mappedBufferPoolData.getTotalCapacity()));
 
                 double processCpuLoad = client.getOSData().getProcessCpuLoad();
                 if (!javaVersion.startsWith("1.8")) {
@@ -315,7 +363,6 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
                 try {
                     if (session.isOpen()) {
-                        log.debug("Sending message: " + textMessage3 + " with session:" + session.getId());
                         session.sendMessage(textMessage3);
                         log.debug("Message: " + textMessage3 + " IS SENT (session:" + session.getId() + ")");
                     }
@@ -335,10 +382,12 @@ public class WebSocketHandler extends TextWebSocketHandler {
 
 
                 }
+
             } catch (IOException | MalformedObjectNameException | InstanceNotFoundException |
                      InterruptedException e) {
                 log.error("Error: {}", e.getMessage());
-
+                client.close();
+                session.close();
                 break;
             }
         }

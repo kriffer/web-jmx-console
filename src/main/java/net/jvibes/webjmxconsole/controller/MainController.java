@@ -3,26 +3,38 @@ package net.jvibes.webjmxconsole.controller;
 import lombok.AllArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.jvibes.webjmxconsole.service.MainPageService;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 
 /**
  * @author Anton Kravets
  */
 
-@Controller
+@RestController
 @AllArgsConstructor
+@RequestMapping("/api")
 @Slf4j
 public class MainController {
 
-   private MainPageService mainPageService;
+    private MainPageService mainPageService;
 
-    @GetMapping("/")
-    public String getMainPage(Model model) {
-        model.addAttribute("connectionMap", mainPageService.getRemoteConnections());
-        model.addAttribute("pids", mainPageService.getLocalProcesses());
-        return "main";
+
+    @GetMapping("/connections")
+    public List<Map<String, String>> getConnections() {
+        return Optional.ofNullable(mainPageService.getRemoteConnections())
+                .orElse(Collections.emptyList());
+
     }
 
+    @GetMapping("/pids")
+    public Map<Long, String> getPids() {
+        return Optional.ofNullable(mainPageService.getLocalProcesses())
+                .orElse(Collections.emptyMap());
+    }
 }

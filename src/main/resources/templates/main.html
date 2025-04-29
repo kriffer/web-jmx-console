@@ -214,18 +214,9 @@
                     </div>
                     <div class="col-sm">
                         <select class="form-select form-select-sm" aria-label="" id="selectConnection"
-                                th:if="${connectionMap != null && !#maps.isEmpty(connectionMap)}" th:field="*{connectionMap}">
-                            <option value="" selected>Select remote connections</option>
-                            <option th:each="connection : ${connectionMap}"
-                                    th:value="${connection.host}+':'+${connection.port}"
-                                    th:text="${connection.host}+':'+${connection.port}">
+                        >
+                        </select>
 
-                            </option>
-                        </select>
-                        <select class="form-select form-select-sm" aria-label="" id="emptySelectConnection"
-                                th:unless="${connectionMap != null && !#maps.isEmpty(connectionMap)}">
-                            <option value="" disabled selected>No remote connections defined</option>
-                        </select>
                     </div>
                     <div class="col-sm">
                         <input type="text" class="form-control  form-control-sm" id="host" placeholder="host">
@@ -246,21 +237,16 @@
                         </div>
                     </div>
                     <div class="col-sm">
-                        <select class="form-select form-select-sm" aria-label="" id="selectPid" th:field="*{pids}">
+                        <select class="form-select form-select-sm" aria-label="" id="selectPid">
 
-                            <option value="" selected>Select local processes</option>
-                            <option th:each="pid : ${pids}"
-                                    th:value="${pid.key}"
-                                    th:text="'PID '+${pid.key}+' ('+${pid.value}+')'">
 
-                            </option>
                         </select>
                     </div>
                 </div>
                 <hr>
                 <div class="row g-1 row-cols-sm-auto">
                     <div class="col-sm">
-                        <button type="submit" class="btn btn-success   btn-sm float-end">Connect</button>
+                        <button type="submit" id="connect-button" class="btn btn-success   btn-sm float-end">Connect</button>
                     </div>
                 </div>
             </form>
@@ -337,7 +323,14 @@
                         </p>
                         <p id="non-heap-init">
                         </p>
+                        <br/>
+                        <p id="direct-pool-memory-used">
+                        </p>
+                        <p id="mapped-pool-memory-used">
+                        </p>
                     </div>
+
+
                 </div>
 
             </div>
@@ -391,7 +384,7 @@
 
     </main>
     <footer class="pt-5 my-5 text-body-secondary border-top">
-        2024, (MIT license)
+        2025 (MIT license)
     </footer>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
